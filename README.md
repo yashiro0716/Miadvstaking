@@ -1,21 +1,38 @@
-# ADV Rewards — World App Mini App
+# ADV Rewards — World Chain Mini App
 
-Responsive Next.js interface for daily ADV rewards on World Chain. The web frontend can be deployed, but real claims remain disabled until an ADVRewards contract is deployed, funded, verified and configured.
+Next.js interface for daily ADV token rewards on World Chain (chain ID 480).
 
-## Configuration
+## Current status
+- The frontend is deployed on Vercel.
+- Claims remain disabled until `NEXT_PUBLIC_REWARDS_CONTRACT` is set to the verified deployment address.
+- Contract source, a Foundry test suite, and a deployment script are included here. Mainnet deployment and funding require an authorized wallet transaction.
+- Never share a private key or seed phrase in chat.
 
-Copy `.env.example` to `.env.local` and set:
+## Contract
+`contracts/ADVRewards.sol` pays a fixed raw-token amount once per wallet every 24 hours. It has an owner pause switch; the owner cannot withdraw the ADV reward token. Accidental non-ADV tokens can be rescued.
 
+The reward amount is passed in the token's smallest units. For an 18-decimal ADV token, 25 ADV is `25000000000000000000`. Verify the token address and decimals on World Chain before deployment.
+
+## Test
+Install Foundry, then run:
+```sh
+forge test
+```
+
+## Deploy (only after reviewing the source and verifying token decimals)
+Set environment variables locally; do not commit them:
+```sh
+export ADV_TOKEN_ADDRESS=0x6d13932b942de3ee93d0e519be41b9ef46cf7fda
+export ADV_REWARD_AMOUNT=25000000000000000000
+forge script script/DeployADVRewards.s.sol:DeployADVRewards --rpc-url https://worldchain-mainnet.g.alchemy.com/public --broadcast
+```
+The example amount assumes 18 decimals; do not use it unless decimals are confirmed. The deployer needs ETH for gas. After deployment, fund the contract with ADV and test a small claim before enabling claims.
+
+## Vercel
+Configure these public environment variables and redeploy:
 - `NEXT_PUBLIC_CHAIN_ID=480`
-- `NEXT_PUBLIC_ADV_TOKEN` to the verified ADV ERC-20 address
-- `NEXT_PUBLIC_REWARDS_CONTRACT` to the deployed ADVRewards contract address
-
-Then run `npm install && npm run dev`. Never put private keys in `NEXT_PUBLIC_*` variables.
+- `NEXT_PUBLIC_ADV_TOKEN=0x6d13932b942de3ee93d0e519be41b9ef46cf7fda`
+- `NEXT_PUBLIC_REWARDS_CONTRACT=<deployed contract address>`
 
 ## World App
-
-MiniKit 2.0 aligns Mini Apps with EIP-1193, so the app uses a wallet provider exposed as `window.ethereum`. Test in World App and follow the current official Mini Apps registration process: https://docs.world.org/mini-apps
-
-## Safety
-
-This frontend does not mint tokens and cannot pay rewards without a real contract. Confirm token address and decimals on Worldscan, test the contract on testnet, have it independently reviewed, then deploy and fund it. The current daily limit is per wallet address, not per verified person. A real deployment is not an official World affiliation.
+Register the production URL and required Mini App metadata in the World Developer Portal after testing wallet behavior inside World App.
