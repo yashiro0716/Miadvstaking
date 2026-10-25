@@ -11,6 +11,7 @@ interface IERC20Rewards {
 /// @dev The deployer must fund this contract with ADV tokens before claims can succeed.
 contract ADVRewards {
     error NotOwner();
+    error WrongChain(uint256 actualChainId);
     error ZeroAddress();
     error ZeroAmount();
     error ClaimsPaused();
@@ -36,6 +37,7 @@ contract ADVRewards {
     }
 
     constructor(address tokenAddress, uint256 rewardAmount_) {
+        if (block.chainid != 480) revert WrongChain(block.chainid);
         if (tokenAddress == address(0)) revert ZeroAddress();
         if (rewardAmount_ == 0) revert ZeroAmount();
         token = IERC20Rewards(tokenAddress);
