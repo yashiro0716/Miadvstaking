@@ -1,7 +1,10 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
-import { BrowserProvider, Contract, formatUnits, isAddress } from "ethers";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { BrowserProvider, Contract, formatUnits, Interface, isAddress } from "ethers";
 import { MiniKit, getWorldAppProvider } from "@worldcoin/minikit-js";
+import { useUserOperationReceipt } from "@worldcoin/minikit-react";
+import { createPublicClient, http } from "viem";
+import { worldchain } from "viem/chains";
 
 declare global { interface Window { ethereum?: { request: (args:{method:string;params?:unknown[]})=>Promise<unknown> } } }
 const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 480);
@@ -14,6 +17,8 @@ const short = (a:string) => a.slice(0,6)+"…"+a.slice(-4);
 const timer = (s:number) => [Math.floor(s/3600),Math.floor(s%3600/60),s%60].map(n=>String(n).padStart(2,"0")).join(":");
 
 export default function RewardsApp() {
+ const publicClient = useMemo(() => createPublicClient({ chain: worldchain, transport: http("https://worldchain-mainnet.g.alchemy.com/public") }), []);
+ const { poll } = useUserOperationReceipt({ client: publicClient });
  const [account,setAccount]=useState(""); const [balance,setBalance]=useState("—"); const [symbol,setSymbol]=useState("ADV");
  const [reward,setReward]=useState("25"); const [next,setNext]=useState(0); const [now,setNow]=useState(0);
  const [paused,setPaused]=useState(false); const [busy,setBusy]=useState(false); const [message,setMessage]=useState("Conecta tu wallet para consultar el saldo.");
@@ -34,7 +39,7 @@ export default function RewardsApp() {
  },[account,provider]);
  useEffect(()=>{setNow(Math.floor(Date.now()/1000));const i=window.setInterval(()=>setNow(Math.floor(Date.now()/1000)),1000);return()=>window.clearInterval(i)},[]);
  const connect=async()=>{setError("");setBusy(true);try{const p=await provider();const a=await p.send("eth_requestAccounts",[]) as string[];if(!a[0])throw new Error("No se seleccionó wallet.");setAccount(a[0]);await refresh(a[0]);setMessage(configured?"Wallet conectada. Estado leído desde World Chain.":"Wallet conectada. Falta desplegar y configurar el contrato de recompensas.");}catch(e){setError(e instanceof Error?e.message:"No se pudo conectar la wallet.");}finally{setBusy(false)}};
- const claim=async()=>{setError("");setTx("");setBusy(true);try{if(!configured)throw new Error("Reclamaciones desactivadas: falta configurar la dirección del contrato desplegado.");if(!account)throw new Error("Conecta primero tu wallet.");const p=await provider();const net=await p.getNetwork();if(Number(net.chainId)!==CHAIN_ID)throw new Error("Cambia a World Chain Mainnet (480).");const c=new Contract(REWARDS,ABI,await p.getSigner());const sent=await c.claim();setTx(sent.hash);setMessage("Transacción enviada. Esperando confirmación…");await sent.wait();setMessage("¡Recompensa confirmada en blockchain!");await refresh(account);}catch(e){setError(e instanceof Error?e.message:"La reclamación falló o fue cancelada.");}finally{setBusy(false)}};
+ const claim=async()=>{setError("");setTx("");setBusy(true);try{if(!configured)throw new Error("Reclamaciones desactivadas: falta configurar la dirección del contrato desplegado.");if(!account)throw new Error("Conecta primero tu wallet.");const p=await provider();const net=await p.getNetwork();if(Number(net.chainId)!==CHAIN_ID)throw new Error("Cambia a World Chain Mainnet (480).");if(MiniKit.isInstalled()){const data=new Interface(ABI).encodeFunctionData("claim",[]);const result=await MiniKit.sendTransaction({chainId:480,transactions:[{to:REWARDS,data,value:"0x0"}]});if(result.executedWith==="fallback")throw new Error("World App no pudo procesar la transacción mediante MiniKit.");setMessage("Transacción enviada. Esperando confirmación en World Chain…");const {receipt}=await poll(result.data.userOpHash);if(!receipt)throw new Error("La transacción fue enviada, pero todavía no hay recibo confirmado. Actualiza el saldo en unos instantes.");setTx(receipt.transactionHash);setMessage("¡Recompensa confirmada en blockchain!");await refresh(account);}else{const c=new Contract(REWARDS,ABI,await p.getSigner());const sent=await c.claim();setTx(sent.hash);setMessage("Transacción enviada. Esperando confirmación…");await sent.wait();setMessage("¡Recompensa confirmada en blockchain!");await refresh(account);}}catch(e){setError(e instanceof Error?e.message:"La reclamación falló o fue cancelada.");}finally{setBusy(false)}};
  const remaining=Math.max(0,next-now);const canClaim=!!account&&configured&&!paused&&remaining===0&&!busy;
  return <main className="shell">
   <header className="topbar"><div className="brand"><div className="coin">A</div><div><strong>ADV Rewards</strong><span>RECOMPENSAS DIARIAS · WORLD CHAIN</span></div></div><div className="network"><i/> {MiniKit.isInstalled()?"World App":"World Chain"}</div></header>
