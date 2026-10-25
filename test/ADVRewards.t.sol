@@ -5,6 +5,7 @@ import "../contracts/ADVRewards.sol";
 
 interface Vm {
     function warp(uint256) external;
+    function chainId(uint256) external;
     function prank(address) external;
     function expectRevert(bytes calldata) external;
 }
@@ -33,9 +34,17 @@ contract ADVRewardsTest {
     address private bob = address(0xB0B);
 
     function setUp() public {
+        vm.chainId(480);
         token = new MockADV();
         rewards = new ADVRewards(address(token), 25 ether);
         token.mint(address(rewards), 1_000 ether);
+    }
+
+    function testDeploymentRevertsOnWrongChain() public {
+        vm.chainId(1);
+        vm.expectRevert(abi.encodeWithSelector(ADVRewards.WrongChain.selector, uint256(1)));
+        new ADVRewards(address(token), 25 ether);
+        vm.chainId(480);
     }
 
     function testClaimPaysFixedRewardAndSetsCooldown() public {
