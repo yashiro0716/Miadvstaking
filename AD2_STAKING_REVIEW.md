@@ -1,23 +1,28 @@
-# AD2 Staking contract (World Chain)
+# AD2 Staking contract — security hardening status
 
-This branch adds a separate staking contract for ADV2.0 (AD2). It does not deploy contracts, move funds, or enable the existing ADV rewards app.
+This is a separate development branch for the new ADV2.0 (AD2) token and staking design. It does not deploy contracts, move funds, or intentionally activate any earlier ADV staking project.
 
-## Rules
-- Intended chain: World Chain Mainnet, chain ID 480.
-- Token: ADV2.0 (AD2), expected fixed supply 2,000,000 and 18 decimals. Verify the token's deployed address and decimals before deployment.
-- Staking contract is separate from the ERC-20 token.
-- Fixed simple APR: 20% (2,000 basis points), matching the previously discussed staking rate. Rewards are paid in AD2 from a separately funded reserve.
-- Users may withdraw principal at any time. Pausing stops new deposits only; it does not disable withdrawals or reward claims.
-- Contract has no owner function to withdraw user principal or sweep AD2.
-- Reward claims revert if the AD2 balance beyond all accounted principal cannot cover the reward. This avoids spending principal as rewards.
-- The deployer must separately fund the staking contract with reward AD2. A 20% APR is not a guarantee of solvency; rewards must be budgeted and tested.
+## Configuration
+- Intended network: World Chain Mainnet, chain ID 480.
+- Token: ADV2.0 (AD2), fixed supply 2,000,000 tokens with 18 decimals.
+- Separate staking contract, target APR 20% (2,000 basis points).
+- Principal withdrawals remain available even if new deposits are paused.
+- No owner function withdraws user principal or sweeps tokens from the contract.
 
-## Tests
-Run with Foundry:
+## Reward reserve hardening
+- Reward accrual is limited by the free reserve after subtracting staked principal and already allocated-but-unclaimed reward liabilities.
+- Once the free reserve is exhausted, additional rewards stop accruing until the contract receives more reserve tokens.
+- A limited reserve is allocated proportionally across all stakers active during the relevant accrual interval; the same reserve is not promised repeatedly.
+- Token transfers are checked for exact received amounts on deposits, so fee-on-transfer tokens are rejected.
+- The 20% figure is a target rate, not a guaranteed return: realized rewards depend on available funding and rounding.
+
+## Validation required
+Run:
 ```sh
-forge test --match-path test/AD2Staking.t.sol -vv
+forge test -vvv
+npm run build
 ```
-These tests are added but have not been run in this environment. They are not an independent security audit.
+Automated checks must pass on the exact commit intended for review. These checks are not a substitute for independent smart-contract security auditing or a live test in World App.
 
 ## Deployment status
-Not deployed. No staking contract address exists in this branch. Do not use on mainnet until tests pass, token address/decimals are verified on-chain, the reserve is funded, and independent security review is complete.
+Not deployed. No mainnet token or staking address has been verified for this new project. Do not deploy or configure production addresses until the exact code passes CI, the token and staking code receive independent review, the reward budget is decided, and an authorized wallet owner approves each deployment transaction. Never share a seed phrase or private key in chat.
