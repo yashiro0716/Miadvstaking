@@ -45,8 +45,11 @@ contract AD2StakingTest {
         token = new MockAD2();
         staking = new AD2Staking(address(token));
         token.mint(alice, 1_000 ether);
-        token.mint(address(staking), 1_000 ether); // separate rewards reserve
+        token.mint(bob, 1_000 ether);
+        token.mint(address(staking), 1_000 ether); // separate reward reserve
         vm.prank(alice);
+        token.approve(address(staking), type(uint256).max);
+        vm.prank(bob);
         token.approve(address(staking), type(uint256).max);
     }
 
@@ -60,7 +63,7 @@ contract AD2StakingTest {
         require(staking.totalStaked() == 60 ether, "remaining stake");
     }
 
-    function testAccruesFixedTwentyPercentAPR() public {
+    function testAccruesFixedTwentyPercentAPRWhenFunded() public {
         vm.prank(alice);
         staking.stake(100 ether);
         vm.warp(block.timestamp + 365 days);
@@ -71,11 +74,11 @@ contract AD2StakingTest {
         vm.prank(alice);
         staking.stake(100 ether);
         vm.warp(block.timestamp + 365 days);
-        // Reserve is 1,000 AD2 and can cover the 20 AD2 reward.
         vm.prank(alice);
         staking.claimRewards();
         require(token.balanceOf(alice) == 920 ether, "reward paid");
         require(staking.totalStaked() == 100 ether, "principal accounting changed");
+        require(token.balanceOf(address(staking)) >= staking.totalStaked(), "principal underfunded");
     }
 
     function testCannotWithdrawMoreThanStaked() public {
@@ -93,16 +96,42 @@ contract AD2StakingTest {
         staking.stake(1 ether);
     }
 
-    function testCannotClaimWhenRewardReserveInsufficient() public {
-        // Deploy a fresh contract with no reward reserve.
+    function testNoReserveMeansNoRewardsAccrue() public {
         AD2Staking emptyReserve = new AD2Staking(address(token));
         vm.prank(alice);
         token.approve(address(emptyReserve), type(uint256).max);
         vm.prank(alice);
         emptyReserve.stake(10 ether);
         vm.warp(block.timestamp + 365 days);
-        vm.expectRevert(abi.encodeWithSelector(AD2Staking.InsufficientRewardReserve.selector));
+        require(emptyReserve.pendingRewards(alice) == 0, "unfunded rewards must not accrue");
+        vm.expectRevert(abi.encodeWithSelector(AD2Staking.ZeroAmount.selector));
         vm.prank(alice);
         emptyReserve.claimRewards();
+    }
+
+    function testLimitedReserveIsAllocatedProportionallyAndNotPromisedTwice() public {
+        // Reduce the initial reserve to 10 AD2 and stake 100 AD2 for each user.
+        vm.prank(address(staking));
+        token.transfer(address(0xDEAD), 990 ether);
+        vm.prank(alice);
+        staking.stake(100 ether);
+        vm.prank(bob);
+        staking.stake(100 ether);
+
+        vm.warp(block.timestamp + 365 days);
+        require(staking.pendingRewards(alice) == 5 ether, "alice share");
+        require(staking.pendingRewards(bob) == 5 ether, "bob share");
+        require(staking.rewardReserve() == 0, "reserve should be fully allocated");
+
+        vm.prank(alice);
+        staking.claimRewards();
+        vm.prank(bob);
+        staking.claimRewards();
+        require(token.balanceOf(address(staking)) == 200 ether, "only principal remains");
+        require(staking.totalRewardsAccruedUnclaimed() == 0, "all reward liabilities cleared");
+
+        vm.warp(block.timestamp + 365 days);
+        require(staking.pendingRewards(alice) == 0, "must not promise depleted reserve");
+        require(staking.pendingRewards(bob) == 0, "must not promise depleted reserve");
     }
 }
