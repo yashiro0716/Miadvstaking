@@ -121,10 +121,10 @@ contract AD2StakingTest {
         vm.warp(block.timestamp + 365 days);
         require(staking.pendingRewards(alice) == 5 ether, "alice share");
         require(staking.pendingRewards(bob) == 5 ether, "bob share");
-        require(staking.rewardReserve() == 0, "reserve should be fully allocated");
 
         vm.prank(alice);
         staking.claimRewards();
+        require(staking.rewardReserve() == 0, "reserve should be fully allocated");
         vm.prank(bob);
         staking.claimRewards();
         require(token.balanceOf(address(staking)) == 200 ether, "only principal remains");
